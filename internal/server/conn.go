@@ -74,11 +74,11 @@ func (s *Server) handleGetLike(w *bufio.Writer, args []string, withCAS bool) err
 			continue
 		}
 		if withCAS {
-			if _, err := fmt.Fprintf(w, "VALUE %s %d %d %d\r\n", item.Key, item.Flags, len(item.Value), item.CAS); err != nil {
+			if _, err := fmt.Fprintf(w, "VALUE %s %d %d %d\r\n", key, item.Flags, len(item.Value), item.CAS); err != nil {
 				return err
 			}
 		} else {
-			if _, err := fmt.Fprintf(w, "VALUE %s %d %d\r\n", item.Key, item.Flags, len(item.Value)); err != nil {
+			if _, err := fmt.Fprintf(w, "VALUE %s %d %d\r\n", key, item.Flags, len(item.Value)); err != nil {
 				return err
 			}
 		}

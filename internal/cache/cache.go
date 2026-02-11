@@ -34,7 +34,6 @@ type Cache struct {
 }
 
 type Item struct {
-	Key   string
 	Value []byte
 
 	Flags uint32
@@ -242,7 +241,6 @@ func (c *Cache) setLocked(key string, flags uint32, value []byte, expUnix int64)
 	}
 
 	item := &Item{
-		Key:     key,
 		Value:   cloneBytes(value),
 		Flags:   flags,
 		Size:    need,
@@ -329,7 +327,6 @@ func parseUint(value []byte) (uint64, error) {
 
 func cloneItem(item *Item) *Item {
 	return &Item{
-		Key:     item.Key,
 		Value:   cloneBytes(item.Value),
 		Flags:   item.Flags,
 		Size:    item.Size,
