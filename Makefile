@@ -43,5 +43,5 @@ tidy:
 
 .PHONY: clean
 clean:
-	rm -rf $(BIN_DIR)
+	rm -f $(BIN_DIR)/$(BINARY)
 	rm -f coverage.out
