@@ -10,6 +10,7 @@
 ## MVP command subset
 
 - `get`
+- `gets`
 - `set`
 - `delete`
 - `incr`
@@ -27,6 +28,8 @@
 ## Differences from memcached
 
 - This server implements only a subset of memcached text protocol commands.
+- `gets` is supported and returns the CAS token in `VALUE` response header.
+- `cas` command is not implemented.
 - `incr` on a missing key creates the key and returns `delta` (memcached returns `NOT_FOUND`).
 - `decr` on a missing key creates the key with `0` and returns `0`.
 - `decr` is clamped at `0`.
