@@ -33,6 +33,23 @@ type Cache struct {
 	nextCAS               uint64
 }
 
+type Item struct {
+	Key   string
+	Value []byte
+
+	Flags uint32
+	Size  int64
+	CAS   uint64
+
+	// ExpUnix is Unix seconds. 0 means no expiration.
+	ExpUnix int64
+}
+
+type lruEntry struct {
+	key  string
+	item *Item
+}
+
 var nowUnix = func() int64 { return time.Now().Unix() }
 
 func NewCache(maxBytes, targetBytes, entryOverhead int64, maxEvictPerOp int, incrSlidingTTLSeconds int64) *Cache {
