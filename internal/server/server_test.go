@@ -60,6 +60,14 @@ func TestSetGetDelete(t *testing.T) {
 		t.Fatalf("unexpected get response:\nwant=%q\n got=%q", expected, resp)
 	}
 
+	resp = sendCommand(t, conn, "gets a\r\n", "END\r\n")
+	if !strings.Contains(resp, "VALUE a 12 3 ") {
+		t.Fatalf("unexpected gets header: %q", resp)
+	}
+	if !strings.HasSuffix(resp, "foo\r\nEND\r\n") {
+		t.Fatalf("unexpected gets body: %q", resp)
+	}
+
 	resp = sendCommand(t, conn, "delete a\r\n", "\r\n")
 	if resp != "DELETED\r\n" {
 		t.Fatalf("unexpected delete response: %q", resp)

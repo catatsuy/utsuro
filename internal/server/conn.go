@@ -40,7 +40,9 @@ func (s *Server) handleConn(conn net.Conn) {
 
 		switch req.cmd {
 		case "get":
-			err = s.handleGet(w, req.args)
+			err = s.handleGetLike(w, req.args, false)
+		case "gets":
+			err = s.handleGetLike(w, req.args, true)
 		case "set":
 			err = s.handleSet(r, w, req.args)
 		case "delete":
@@ -61,7 +63,7 @@ func (s *Server) handleConn(conn net.Conn) {
 	}
 }
 
-func (s *Server) handleGet(w *bufio.Writer, args []string) error {
+func (s *Server) handleGetLike(w *bufio.Writer, args []string, withCAS bool) error {
 	if len(args) == 0 {
 		return writeClientError(w, "get requires at least one key")
 	}
@@ -71,8 +73,14 @@ func (s *Server) handleGet(w *bufio.Writer, args []string) error {
 		if !ok {
 			continue
 		}
-		if _, err := fmt.Fprintf(w, "VALUE %s %d %d\r\n", item.Key, item.Flags, len(item.Value)); err != nil {
-			return err
+		if withCAS {
+			if _, err := fmt.Fprintf(w, "VALUE %s %d %d %d\r\n", item.Key, item.Flags, len(item.Value), item.CAS); err != nil {
+				return err
+			}
+		} else {
+			if _, err := fmt.Fprintf(w, "VALUE %s %d %d\r\n", item.Key, item.Flags, len(item.Value)); err != nil {
+				return err
+			}
 		}
 		if _, err := w.Write(item.Value); err != nil {
 			return err

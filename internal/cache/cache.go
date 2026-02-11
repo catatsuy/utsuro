@@ -33,6 +33,7 @@ type Cache struct {
 	maxEvictPerOp int
 
 	incrSlidingTTLSeconds int64
+	nextCAS               uint64
 }
 
 var nowUnix = func() int64 { return time.Now().Unix() }
@@ -62,6 +63,7 @@ func NewCache(maxBytes, targetBytes, entryOverhead int64, maxEvictPerOp int, inc
 		entryOverhead:         entryOverhead,
 		maxEvictPerOp:         maxEvictPerOp,
 		incrSlidingTTLSeconds: incrSlidingTTLSeconds,
+		nextCAS:               1,
 	}
 }
 
@@ -211,6 +213,7 @@ func (c *Cache) setLocked(key string, flags uint32, value []byte, expUnix int64)
 			entry.item.Value = cloneBytes(value)
 			entry.item.Flags = flags
 			entry.item.Size = need
+			entry.item.CAS = c.nextCASLocked()
 			entry.item.ExpUnix = expUnix
 			c.usedBytes += delta
 			c.lru.MoveToFront(elem)
@@ -229,6 +232,7 @@ func (c *Cache) setLocked(key string, flags uint32, value []byte, expUnix int64)
 		Value:   cloneBytes(value),
 		Flags:   flags,
 		Size:    need,
+		CAS:     c.nextCASLocked(),
 		ExpUnix: expUnix,
 	}
 	elem := c.lru.PushFront(&lruEntry{key: key, item: item})
@@ -315,6 +319,7 @@ func cloneItem(item *model.Item) *model.Item {
 		Value:   cloneBytes(item.Value),
 		Flags:   item.Flags,
 		Size:    item.Size,
+		CAS:     item.CAS,
 		ExpUnix: item.ExpUnix,
 	}
 }
@@ -334,4 +339,13 @@ func (c *Cache) expirationForIncrDecr(now int64) int64 {
 
 func isExpired(item *model.Item, now int64) bool {
 	return item.ExpUnix > 0 && item.ExpUnix <= now
+}
+
+func (c *Cache) nextCASLocked() uint64 {
+	v := c.nextCAS
+	c.nextCAS++
+	if c.nextCAS == 0 {
+		c.nextCAS = 1
+	}
+	return v
 }
