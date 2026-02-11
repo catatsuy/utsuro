@@ -29,6 +29,7 @@ It reflects that this server is an in-memory volatile KVS: data may disappear at
 - `-evict-max` (default: `64`)
 - `-incr-sliding-ttl-seconds` (default: `0`, disabled)
 - `-verbose`
+- `-version` (print version and exit)
 
 ## Differences from memcached
 

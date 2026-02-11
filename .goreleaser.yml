@@ -1,0 +1,28 @@
+version: 2
+
+project_name: utsuro
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: ./cmd/utsuro
+    binary: utsuro
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/catatsuy/utsuro/internal/cli.Version={{.Version}}
+
+archives:
+  - name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+
+release:
+  prerelease: auto
