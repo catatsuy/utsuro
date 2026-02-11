@@ -2,6 +2,11 @@
 
 `utsuro` is an in-memory volatile KVS server that supports a subset of the memcached text protocol.
 
+## Name
+
+`utsuro` comes from the Japanese word *utsuro* (うつろ), meaning “empty”, “hollow”, or “transient”.
+It reflects that this server is an in-memory volatile KVS: data may disappear at any time.
+
 ## Warning
 
 - Data is volatile and may be lost at any time.
