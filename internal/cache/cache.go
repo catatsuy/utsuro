@@ -4,16 +4,19 @@ import (
 	"container/list"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/catatsuy/utsuro/internal/model"
 )
 
 var (
 	ErrObjectTooLarge = errors.New("object too large")
-	ErrNoSpace        = errors.New("no space available")
+	ErrNoSpace        = errors.New("out of memory")
 	ErrNonNumeric     = errors.New("cannot increment or decrement non-numeric value")
+	ErrOverflow       = errors.New("increment or decrement overflow")
 )
 
 type Cache struct {
@@ -28,9 +31,13 @@ type Cache struct {
 
 	entryOverhead int64
 	maxEvictPerOp int
+
+	incrSlidingTTLSeconds int64
 }
 
-func NewCache(maxBytes, targetBytes, entryOverhead int64, maxEvictPerOp int) *Cache {
+var nowUnix = func() int64 { return time.Now().Unix() }
+
+func NewCache(maxBytes, targetBytes, entryOverhead int64, maxEvictPerOp int, incrSlidingTTLSeconds int64) *Cache {
 	if maxBytes <= 0 {
 		maxBytes = 256 * 1024 * 1024
 	}
@@ -43,14 +50,18 @@ func NewCache(maxBytes, targetBytes, entryOverhead int64, maxEvictPerOp int) *Ca
 	if maxEvictPerOp <= 0 {
 		maxEvictPerOp = 64
 	}
+	if incrSlidingTTLSeconds < 0 {
+		incrSlidingTTLSeconds = 0
+	}
 
 	return &Cache{
-		maxBytes:      maxBytes,
-		targetBytes:   targetBytes,
-		items:         make(map[string]*list.Element),
-		lru:           list.New(),
-		entryOverhead: entryOverhead,
-		maxEvictPerOp: maxEvictPerOp,
+		maxBytes:              maxBytes,
+		targetBytes:           targetBytes,
+		items:                 make(map[string]*list.Element),
+		lru:                   list.New(),
+		entryOverhead:         entryOverhead,
+		maxEvictPerOp:         maxEvictPerOp,
+		incrSlidingTTLSeconds: incrSlidingTTLSeconds,
 	}
 }
 
@@ -62,8 +73,13 @@ func (c *Cache) Get(key string) (*model.Item, bool) {
 	if !ok {
 		return nil, false
 	}
-	c.lru.MoveToFront(elem)
+	now := nowUnix()
 	entry := elem.Value.(*lruEntry)
+	if isExpired(entry.item, now) {
+		c.removeElementLocked(elem)
+		return nil, false
+	}
+	c.lru.MoveToFront(elem)
 
 	return cloneItem(entry.item), true
 }
@@ -72,7 +88,7 @@ func (c *Cache) Set(key string, flags uint32, value []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.setLocked(key, flags, value)
+	return c.setLocked(key, flags, value, 0)
 }
 
 func (c *Cache) Delete(key string) bool {
@@ -83,6 +99,12 @@ func (c *Cache) Delete(key string) bool {
 	if !ok {
 		return false
 	}
+	now := nowUnix()
+	entry := elem.Value.(*lruEntry)
+	if isExpired(entry.item, now) {
+		c.removeElementLocked(elem)
+		return false
+	}
 	c.removeElementLocked(elem)
 	return true
 }
@@ -91,21 +113,35 @@ func (c *Cache) Incr(key string, delta uint64) (uint64, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	now := nowUnix()
+	expUnix := c.expirationForIncrDecr(now)
+
 	elem, ok := c.items[key]
 	if !ok {
-		if err := c.setLocked(key, 0, []byte(strconv.FormatUint(delta, 10))); err != nil {
+		if err := c.setLocked(key, 0, []byte(strconv.FormatUint(delta, 10)), expUnix); err != nil {
 			return 0, err
 		}
 		return delta, nil
 	}
 
 	entry := elem.Value.(*lruEntry)
+	if isExpired(entry.item, now) {
+		c.removeElementLocked(elem)
+		if err := c.setLocked(key, 0, []byte(strconv.FormatUint(delta, 10)), expUnix); err != nil {
+			return 0, err
+		}
+		return delta, nil
+	}
+
 	cur, err := parseUint(entry.item.Value)
 	if err != nil {
 		return 0, ErrNonNumeric
 	}
+	if cur > math.MaxUint64-delta {
+		return 0, ErrOverflow
+	}
 	next := cur + delta
-	if err := c.setLocked(key, entry.item.Flags, []byte(strconv.FormatUint(next, 10))); err != nil {
+	if err := c.setLocked(key, entry.item.Flags, []byte(strconv.FormatUint(next, 10)), expUnix); err != nil {
 		return 0, err
 	}
 	return next, nil
@@ -115,15 +151,26 @@ func (c *Cache) Decr(key string, delta uint64) (uint64, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	now := nowUnix()
+	expUnix := c.expirationForIncrDecr(now)
+
 	elem, ok := c.items[key]
 	if !ok {
-		if err := c.setLocked(key, 0, []byte("0")); err != nil {
+		if err := c.setLocked(key, 0, []byte("0"), expUnix); err != nil {
 			return 0, err
 		}
 		return 0, nil
 	}
 
 	entry := elem.Value.(*lruEntry)
+	if isExpired(entry.item, now) {
+		c.removeElementLocked(elem)
+		if err := c.setLocked(key, 0, []byte("0"), expUnix); err != nil {
+			return 0, err
+		}
+		return 0, nil
+	}
+
 	cur, err := parseUint(entry.item.Value)
 	if err != nil {
 		return 0, ErrNonNumeric
@@ -135,59 +182,66 @@ func (c *Cache) Decr(key string, delta uint64) (uint64, error) {
 	} else {
 		next = cur - delta
 	}
-	if err := c.setLocked(key, entry.item.Flags, []byte(strconv.FormatUint(next, 10))); err != nil {
+	if err := c.setLocked(key, entry.item.Flags, []byte(strconv.FormatUint(next, 10)), expUnix); err != nil {
 		return 0, err
 	}
 	return next, nil
 }
 
-func (c *Cache) setLocked(key string, flags uint32, value []byte) error {
+func (c *Cache) setLocked(key string, flags uint32, value []byte, expUnix int64) error {
 	need := c.entrySize(key, value)
 	if need > c.maxBytes {
 		return ErrObjectTooLarge
 	}
+	now := nowUnix()
 
 	if elem, ok := c.items[key]; ok {
 		entry := elem.Value.(*lruEntry)
-		delta := need - entry.item.Size
-		if delta > 0 {
-			c.evictLocked(delta, key)
-		}
-		if c.usedBytes+delta > c.maxBytes {
-			return ErrNoSpace
-		}
+		if isExpired(entry.item, now) {
+			c.removeElementLocked(elem)
+		} else {
+			delta := need - entry.item.Size
+			if delta > 0 {
+				c.evictLocked(delta, key, now)
+			}
+			if c.usedBytes+delta > c.maxBytes {
+				return ErrNoSpace
+			}
 
-		entry.item.Value = cloneBytes(value)
-		entry.item.Flags = flags
-		entry.item.Size = need
-		c.usedBytes += delta
-		c.lru.MoveToFront(elem)
-		c.evictBestEffortLocked("")
-		return nil
+			entry.item.Value = cloneBytes(value)
+			entry.item.Flags = flags
+			entry.item.Size = need
+			entry.item.ExpUnix = expUnix
+			c.usedBytes += delta
+			c.lru.MoveToFront(elem)
+			c.evictBestEffortLocked("", now)
+			return nil
+		}
 	}
 
-	c.evictLocked(need, "")
+	c.evictLocked(need, "", now)
 	if c.usedBytes+need > c.maxBytes {
 		return ErrNoSpace
 	}
 
 	item := &model.Item{
-		Key:   key,
-		Value: cloneBytes(value),
-		Flags: flags,
-		Size:  need,
+		Key:     key,
+		Value:   cloneBytes(value),
+		Flags:   flags,
+		Size:    need,
+		ExpUnix: expUnix,
 	}
 	elem := c.lru.PushFront(&lruEntry{key: key, item: item})
 	c.items[key] = elem
 	c.usedBytes += need
-	c.evictBestEffortLocked("")
+	c.evictBestEffortLocked("", now)
 	return nil
 }
 
-func (c *Cache) evictLocked(incomingDelta int64, protectKey string) {
+func (c *Cache) evictLocked(incomingDelta int64, protectKey string, now int64) {
 	evicted := 0
 	for c.usedBytes+incomingDelta > c.maxBytes && evicted < c.maxEvictPerOp {
-		victim := c.selectVictimLocked(protectKey)
+		victim := c.selectVictimLocked(protectKey, now)
 		if victim == nil {
 			return
 		}
@@ -196,7 +250,7 @@ func (c *Cache) evictLocked(incomingDelta int64, protectKey string) {
 	}
 
 	for c.usedBytes+incomingDelta > c.targetBytes && evicted < c.maxEvictPerOp {
-		victim := c.selectVictimLocked(protectKey)
+		victim := c.selectVictimLocked(protectKey, now)
 		if victim == nil {
 			return
 		}
@@ -205,10 +259,10 @@ func (c *Cache) evictLocked(incomingDelta int64, protectKey string) {
 	}
 }
 
-func (c *Cache) evictBestEffortLocked(protectKey string) {
+func (c *Cache) evictBestEffortLocked(protectKey string, now int64) {
 	evicted := 0
 	for c.usedBytes > c.targetBytes && evicted < c.maxEvictPerOp {
-		victim := c.selectVictimLocked(protectKey)
+		victim := c.selectVictimLocked(protectKey, now)
 		if victim == nil {
 			return
 		}
@@ -217,15 +271,21 @@ func (c *Cache) evictBestEffortLocked(protectKey string) {
 	}
 }
 
-func (c *Cache) selectVictimLocked(protectKey string) *list.Element {
+func (c *Cache) selectVictimLocked(protectKey string, now int64) *list.Element {
+	var fallback *list.Element
 	for elem := c.lru.Back(); elem != nil; elem = elem.Prev() {
 		entry := elem.Value.(*lruEntry)
 		if entry.key == protectKey {
 			continue
 		}
-		return elem
+		if isExpired(entry.item, now) {
+			return elem
+		}
+		if fallback == nil {
+			fallback = elem
+		}
 	}
-	return nil
+	return fallback
 }
 
 func (c *Cache) removeElementLocked(elem *list.Element) {
@@ -251,10 +311,11 @@ func parseUint(value []byte) (uint64, error) {
 
 func cloneItem(item *model.Item) *model.Item {
 	return &model.Item{
-		Key:   item.Key,
-		Value: cloneBytes(item.Value),
-		Flags: item.Flags,
-		Size:  item.Size,
+		Key:     item.Key,
+		Value:   cloneBytes(item.Value),
+		Flags:   item.Flags,
+		Size:    item.Size,
+		ExpUnix: item.ExpUnix,
 	}
 }
 
@@ -262,4 +323,15 @@ func cloneBytes(b []byte) []byte {
 	out := make([]byte, len(b))
 	copy(out, b)
 	return out
+}
+
+func (c *Cache) expirationForIncrDecr(now int64) int64 {
+	if c.incrSlidingTTLSeconds <= 0 {
+		return 0
+	}
+	return now + c.incrSlidingTTLSeconds
+}
+
+func isExpired(item *model.Item, now int64) bool {
+	return item.ExpUnix > 0 && item.ExpUnix <= now
 }

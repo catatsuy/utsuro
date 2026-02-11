@@ -138,6 +138,9 @@ func (s *Server) handleIncrDecr(w *bufio.Writer, args []string, incr bool) error
 		if errors.Is(err, cache.ErrNonNumeric) {
 			return writeClientError(w, cache.ErrNonNumeric.Error())
 		}
+		if errors.Is(err, cache.ErrOverflow) {
+			return writeClientError(w, cache.ErrOverflow.Error())
+		}
 		if errors.Is(err, cache.ErrObjectTooLarge) || errors.Is(err, cache.ErrNoSpace) {
 			return writeServerError(w, err.Error())
 		}

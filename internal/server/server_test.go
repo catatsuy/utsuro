@@ -93,6 +93,15 @@ func TestIncr(t *testing.T) {
 	if resp != "CLIENT_ERROR cannot increment or decrement non-numeric value\r\n" {
 		t.Fatalf("unexpected non numeric response: %q", resp)
 	}
+
+	resp = sendCommand(t, conn, "set max 0 0 20\r\n18446744073709551615\r\n", "\r\n")
+	if resp != "STORED\r\n" {
+		t.Fatalf("unexpected set max response: %q", resp)
+	}
+	resp = sendCommand(t, conn, "incr max 1\r\n", "\r\n")
+	if resp != "CLIENT_ERROR increment or decrement overflow\r\n" {
+		t.Fatalf("unexpected overflow response: %q", resp)
+	}
 }
 
 func TestDecr(t *testing.T) {

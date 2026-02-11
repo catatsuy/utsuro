@@ -15,8 +15,23 @@
 - `incr`
 - `decr`
 
-## Compatibility notes
+## Options
 
-- This is a subset implementation of the memcached text protocol.
-- `incr` behavior is intentionally incompatible for missing keys: it creates the key and returns the value.
-- `decr` on missing keys creates `0` and returns `0`.
+- `-listen` (default: `127.0.0.1:11211`)
+- `-max-bytes` (default: `268435456`)
+- `-target-bytes` (default: `max-bytes * 95 / 100`)
+- `-evict-max` (default: `64`)
+- `-incr-sliding-ttl-seconds` (default: `0`, disabled)
+- `-verbose`
+
+## Differences from memcached
+
+- This server implements only a subset of memcached text protocol commands.
+- `incr` on a missing key creates the key and returns `delta` (memcached returns `NOT_FOUND`).
+- `decr` on a missing key creates the key with `0` and returns `0`.
+- `decr` is clamped at `0`.
+- Numeric values are treated as `uint64`.
+- Non-numeric values return `CLIENT_ERROR cannot increment or decrement non-numeric value`.
+- `incr` overflow (`uint64` max exceeded) returns `CLIENT_ERROR increment or decrement overflow`.
+- When `-incr-sliding-ttl-seconds > 0`, successful `incr/decr` always set/update TTL to `now + ttl`.
+- If a key is expired at `incr/decr` time, it is deleted first and treated as missing (then created by rules above).

@@ -39,12 +39,13 @@ func (c *CLI) Run(args []string) int {
 
 	logger := log.New(c.stderr, "utsuro: ", log.LstdFlags)
 	srv := server.NewServer(server.Config{
-		ListenAddr:    opts.listenAddr,
-		MaxBytes:      opts.maxBytes,
-		TargetBytes:   opts.targetBytes,
-		MaxEvictPerOp: opts.maxEvictPerOp,
-		Verbose:       opts.verbose,
-		Logger:        logger,
+		ListenAddr:            opts.listenAddr,
+		MaxBytes:              opts.maxBytes,
+		TargetBytes:           opts.targetBytes,
+		MaxEvictPerOp:         opts.maxEvictPerOp,
+		IncrSlidingTTLSeconds: opts.incrSlidingTTLSeconds,
+		Verbose:               opts.verbose,
+		Logger:                logger,
 	})
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

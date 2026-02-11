@@ -12,12 +12,13 @@ import (
 )
 
 type Config struct {
-	ListenAddr    string
-	MaxBytes      int64
-	TargetBytes   int64
-	MaxEvictPerOp int
-	Verbose       bool
-	Logger        *log.Logger
+	ListenAddr            string
+	MaxBytes              int64
+	TargetBytes           int64
+	MaxEvictPerOp         int
+	IncrSlidingTTLSeconds int64
+	Verbose               bool
+	Logger                *log.Logger
 }
 
 type Server struct {
@@ -41,7 +42,7 @@ func NewServer(cfg Config) *Server {
 
 	return &Server{
 		cfg:     cfg,
-		cache:   cache.NewCache(cfg.MaxBytes, cfg.TargetBytes, 200, cfg.MaxEvictPerOp),
+		cache:   cache.NewCache(cfg.MaxBytes, cfg.TargetBytes, 200, cfg.MaxEvictPerOp, cfg.IncrSlidingTTLSeconds),
 		readyCh: make(chan struct{}),
 		logger:  logger,
 	}

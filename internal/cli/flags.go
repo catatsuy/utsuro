@@ -3,11 +3,12 @@ package cli
 import "flag"
 
 type options struct {
-	listenAddr    string
-	maxBytes      int64
-	targetBytes   int64
-	maxEvictPerOp int
-	verbose       bool
+	listenAddr            string
+	maxBytes              int64
+	targetBytes           int64
+	maxEvictPerOp         int
+	incrSlidingTTLSeconds int64
+	verbose               bool
 }
 
 func parseFlags(args []string) (options, error) {
@@ -17,6 +18,7 @@ func parseFlags(args []string) (options, error) {
 	fs.Int64Var(&opt.maxBytes, "max-bytes", 256*1024*1024, "max logical bytes")
 	fs.Int64Var(&opt.targetBytes, "target-bytes", 0, "eviction target bytes")
 	fs.IntVar(&opt.maxEvictPerOp, "evict-max", 64, "max evictions per operation")
+	fs.Int64Var(&opt.incrSlidingTTLSeconds, "incr-sliding-ttl-seconds", 0, "sliding TTL in seconds for successful incr/decr; 0 disables")
 	fs.BoolVar(&opt.verbose, "verbose", false, "verbose logging")
 
 	if err := fs.Parse(args); err != nil {
