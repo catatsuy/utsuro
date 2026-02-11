@@ -7,10 +7,27 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime"
+	"runtime/debug"
 	"syscall"
 
 	"github.com/catatsuy/utsuro/internal/server"
 )
+
+var Version string
+
+func version() string {
+	if Version != "" {
+		return Version
+	}
+
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "(devel)"
+	}
+
+	return info.Main.Version
+}
 
 type CLI struct {
 	stdout io.Writer
@@ -31,6 +48,10 @@ func (c *CLI) Run(args []string) int {
 	if err != nil {
 		fmt.Fprintf(c.stderr, "failed to parse flags: %v\n", err)
 		return 2
+	}
+	if opts.showVersion {
+		fmt.Fprintf(c.stdout, "utsuro version %s; %s\n", version(), runtime.Version())
+		return 0
 	}
 
 	logger := slog.New(slog.NewTextHandler(c.stderr, nil))

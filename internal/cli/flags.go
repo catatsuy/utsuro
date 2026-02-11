@@ -9,6 +9,7 @@ type options struct {
 	maxEvictPerOp         int
 	incrSlidingTTLSeconds int64
 	verbose               bool
+	showVersion           bool
 }
 
 func parseFlags(args []string) (options, error) {
@@ -20,6 +21,7 @@ func parseFlags(args []string) (options, error) {
 	fs.IntVar(&opt.maxEvictPerOp, "evict-max", 64, "max evictions per operation")
 	fs.Int64Var(&opt.incrSlidingTTLSeconds, "incr-sliding-ttl-seconds", 0, "sliding TTL in seconds for successful incr/decr; 0 disables")
 	fs.BoolVar(&opt.verbose, "verbose", false, "verbose logging")
+	fs.BoolVar(&opt.showVersion, "version", false, "print version and exit")
 
 	if err := fs.Parse(args); err != nil {
 		return options{}, err
