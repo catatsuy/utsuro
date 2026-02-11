@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"container/list"
 	"errors"
 	"fmt"
 	"math"
@@ -26,8 +25,8 @@ type Cache struct {
 	targetBytes int64
 	usedBytes   int64
 
-	items map[string]*list.Element
-	lru   *list.List
+	items map[string]*listElement[*lruEntry]
+	lru   *linkedList[*lruEntry]
 
 	entryOverhead int64
 	maxEvictPerOp int
@@ -58,8 +57,8 @@ func NewCache(maxBytes, targetBytes, entryOverhead int64, maxEvictPerOp int, inc
 	return &Cache{
 		maxBytes:              maxBytes,
 		targetBytes:           targetBytes,
-		items:                 make(map[string]*list.Element),
-		lru:                   list.New(),
+		items:                 make(map[string]*listElement[*lruEntry]),
+		lru:                   newLinkedList[*lruEntry](),
 		entryOverhead:         entryOverhead,
 		maxEvictPerOp:         maxEvictPerOp,
 		incrSlidingTTLSeconds: incrSlidingTTLSeconds,
@@ -76,7 +75,7 @@ func (c *Cache) Get(key string) (*model.Item, bool) {
 		return nil, false
 	}
 	now := nowUnix()
-	entry := elem.Value.(*lruEntry)
+	entry := elem.Value
 	if isExpired(entry.item, now) {
 		c.removeElementLocked(elem)
 		return nil, false
@@ -102,7 +101,7 @@ func (c *Cache) Delete(key string) bool {
 		return false
 	}
 	now := nowUnix()
-	entry := elem.Value.(*lruEntry)
+	entry := elem.Value
 	if isExpired(entry.item, now) {
 		c.removeElementLocked(elem)
 		return false
@@ -126,7 +125,7 @@ func (c *Cache) Incr(key string, delta uint64) (uint64, error) {
 		return delta, nil
 	}
 
-	entry := elem.Value.(*lruEntry)
+	entry := elem.Value
 	if isExpired(entry.item, now) {
 		c.removeElementLocked(elem)
 		if err := c.setLocked(key, 0, []byte(strconv.FormatUint(delta, 10)), expUnix); err != nil {
@@ -164,7 +163,7 @@ func (c *Cache) Decr(key string, delta uint64) (uint64, error) {
 		return 0, nil
 	}
 
-	entry := elem.Value.(*lruEntry)
+	entry := elem.Value
 	if isExpired(entry.item, now) {
 		c.removeElementLocked(elem)
 		if err := c.setLocked(key, 0, []byte("0"), expUnix); err != nil {
@@ -198,7 +197,7 @@ func (c *Cache) setLocked(key string, flags uint32, value []byte, expUnix int64)
 	now := nowUnix()
 
 	if elem, ok := c.items[key]; ok {
-		entry := elem.Value.(*lruEntry)
+		entry := elem.Value
 		if isExpired(entry.item, now) {
 			c.removeElementLocked(elem)
 		} else {
@@ -275,10 +274,10 @@ func (c *Cache) evictBestEffortLocked(protectKey string, now int64) {
 	}
 }
 
-func (c *Cache) selectVictimLocked(protectKey string, now int64) *list.Element {
-	var fallback *list.Element
+func (c *Cache) selectVictimLocked(protectKey string, now int64) *listElement[*lruEntry] {
+	var fallback *listElement[*lruEntry]
 	for elem := c.lru.Back(); elem != nil; elem = elem.Prev() {
-		entry := elem.Value.(*lruEntry)
+		entry := elem.Value
 		if entry.key == protectKey {
 			continue
 		}
@@ -292,8 +291,8 @@ func (c *Cache) selectVictimLocked(protectKey string, now int64) *list.Element {
 	return fallback
 }
 
-func (c *Cache) removeElementLocked(elem *list.Element) {
-	entry := elem.Value.(*lruEntry)
+func (c *Cache) removeElementLocked(elem *listElement[*lruEntry]) {
+	entry := elem.Value
 	delete(c.items, entry.key)
 	c.lru.Remove(elem)
 	c.usedBytes -= entry.item.Size
