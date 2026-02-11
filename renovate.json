@@ -1,0 +1,67 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "enabledManagers": [
+    "github-actions",
+    "gomod"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github\\/workflows\\/go\\.yml$/"
+      ],
+      "datasourceTemplate": "golang-version",
+      "depNameTemplate": "go-ci",
+      "matchStrings": [
+        "go-version:\\s*\\\"?(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\\\"?"
+      ]
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github\\/workflows\\/security\\.yml$/"
+      ],
+      "datasourceTemplate": "golang-version",
+      "depNameTemplate": "go-security",
+      "matchStrings": [
+        "go-version-input:\\s*\\\"?(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\\\"?"
+      ]
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github\\/workflows\\/release\\.yml$/"
+      ],
+      "datasourceTemplate": "golang-version",
+      "depNameTemplate": "go-release",
+      "matchStrings": [
+        "go-version:\\s*\\\"?(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\\\"?"
+      ]
+    }
+  ],
+  "packageRules": [
+    {
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchFileNames": [
+        "go.mod",
+        "benchmark/go.mod"
+      ],
+      "groupName": "go modules"
+    },
+    {
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "github actions"
+    }
+  ],
+  "postUpdateOptions": [
+    "gomodTidy",
+    "gomodUpdateImportPaths"
+  ]
+}
