@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -33,7 +33,7 @@ func (c *CLI) Run(args []string) int {
 		return 2
 	}
 
-	logger := log.New(c.stderr, "utsuro: ", log.LstdFlags)
+	logger := slog.New(slog.NewTextHandler(c.stderr, nil))
 	srv := server.NewServer(server.Config{
 		ListenAddr:            opts.listenAddr,
 		MaxBytes:              opts.maxBytes,

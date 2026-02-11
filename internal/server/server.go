@@ -3,8 +3,9 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"sync"
 
@@ -18,7 +19,7 @@ type Config struct {
 	MaxEvictPerOp         int
 	IncrSlidingTTLSeconds int64
 	Verbose               bool
-	Logger                *log.Logger
+	Logger                *slog.Logger
 }
 
 type Server struct {
@@ -31,13 +32,13 @@ type Server struct {
 	readyOnce sync.Once
 	closed    bool
 
-	logger *log.Logger
+	logger *slog.Logger
 }
 
 func NewServer(cfg Config) *Server {
 	logger := cfg.Logger
 	if logger == nil {
-		logger = log.New(io.Discard, "", 0)
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 
 	return &Server{
@@ -115,5 +116,5 @@ func (s *Server) logf(format string, args ...any) {
 	if !s.cfg.Verbose {
 		return
 	}
-	s.logger.Printf(format, args...)
+	s.logger.Info(fmt.Sprintf(format, args...))
 }
