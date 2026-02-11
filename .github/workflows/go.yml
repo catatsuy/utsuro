@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.7"
+          cache: true
+
+      - name: Root tests
+        run: |
+          make test
+          make build
+
+      - name: Benchmark module tests
+        run: |
+          cd benchmark
+          go test ./... -count=1 -timeout=120s
