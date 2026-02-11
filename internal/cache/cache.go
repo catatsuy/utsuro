@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"sync"
 	"time"
-
-	"github.com/catatsuy/utsuro/internal/model"
 )
 
 var (
@@ -66,7 +64,7 @@ func NewCache(maxBytes, targetBytes, entryOverhead int64, maxEvictPerOp int, inc
 	}
 }
 
-func (c *Cache) Get(key string) (*model.Item, bool) {
+func (c *Cache) Get(key string) (*Item, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -226,7 +224,7 @@ func (c *Cache) setLocked(key string, flags uint32, value []byte, expUnix int64)
 		return ErrNoSpace
 	}
 
-	item := &model.Item{
+	item := &Item{
 		Key:     key,
 		Value:   cloneBytes(value),
 		Flags:   flags,
@@ -312,8 +310,8 @@ func parseUint(value []byte) (uint64, error) {
 	return strconv.ParseUint(string(value), 10, 64)
 }
 
-func cloneItem(item *model.Item) *model.Item {
-	return &model.Item{
+func cloneItem(item *Item) *Item {
+	return &Item{
 		Key:     item.Key,
 		Value:   cloneBytes(item.Value),
 		Flags:   item.Flags,
@@ -336,7 +334,7 @@ func (c *Cache) expirationForIncrDecr(now int64) int64 {
 	return now + c.incrSlidingTTLSeconds
 }
 
-func isExpired(item *model.Item, now int64) bool {
+func isExpired(item *Item, now int64) bool {
 	return item.ExpUnix > 0 && item.ExpUnix <= now
 }
 

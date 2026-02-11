@@ -16,17 +16,13 @@ type CLI struct {
 	stdout io.Writer
 	stderr io.Writer
 	stdin  io.Reader
-	deps   any
-	isTTY  bool
 }
 
-func NewCLI(stdout, stderr io.Writer, stdin io.Reader, deps any, isTTY bool) *CLI {
+func NewCLI(stdout, stderr io.Writer, stdin io.Reader) *CLI {
 	return &CLI{
 		stdout: stdout,
 		stderr: stderr,
 		stdin:  stdin,
-		deps:   deps,
-		isTTY:  isTTY,
 	}
 }
 
