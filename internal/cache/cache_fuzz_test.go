@@ -11,7 +11,7 @@ func FuzzCacheOperations(f *testing.F) {
 		c := NewCache(256, 256, 0, 64, 0)
 		keys := []string{"a", "b", "c", "d", "e"}
 
-		for i := 0; i < len(data); i++ {
+		for i := range data {
 			op := data[i] % 5
 			key := keys[int(data[i])%len(keys)]
 
@@ -19,7 +19,7 @@ func FuzzCacheOperations(f *testing.F) {
 			case 0:
 				valLen := int(data[i] % 32)
 				value := make([]byte, valLen)
-				for j := 0; j < valLen; j++ {
+				for j := range valLen {
 					value[j] = data[(i+j)%len(data)]
 				}
 				_ = c.Set(key, uint32(data[i]), value)
