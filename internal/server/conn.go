@@ -94,7 +94,7 @@ func (s *Server) handleGetLike(w *bufio.Writer, args []string, withCAS bool) err
 }
 
 func (s *Server) handleSet(r *bufio.Reader, w *bufio.Writer, args []string) error {
-	key, flags, bytesN, err := parseSetArgs(args)
+	key, flags, exptime, bytesN, err := parseSetArgs(args)
 	if err != nil {
 		return writeClientError(w, err.Error())
 	}
@@ -107,7 +107,8 @@ func (s *Server) handleSet(r *bufio.Reader, w *bufio.Writer, args []string) erro
 		return writeClientError(w, "bad data chunk")
 	}
 
-	if err := s.cache.Set(key, flags, value); err != nil {
+	expUnix := normalizeExptime(exptime, nowUnix())
+	if err := s.cache.SetWithExpiration(key, flags, value, expUnix); err != nil {
 		if errors.Is(err, cache.ErrObjectTooLarge) || errors.Is(err, cache.ErrNoSpace) {
 			return writeServerError(w, err.Error())
 		}

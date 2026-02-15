@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type request struct {
@@ -31,27 +32,42 @@ func parseLine(line string) (request, error) {
 	return request{cmd: cmd, args: fields[1:]}, nil
 }
 
-func parseSetArgs(args []string) (key string, flags uint32, bytesN int, err error) {
+func parseSetArgs(args []string) (key string, flags uint32, exptime int64, bytesN int, err error) {
 	if len(args) != 4 {
-		return "", 0, 0, fmt.Errorf("set requires 4 arguments")
+		return "", 0, 0, 0, fmt.Errorf("set requires 4 arguments")
 	}
 	key = args[0]
 
 	parsedFlags, err := strconv.ParseUint(args[1], 10, 32)
 	if err != nil {
-		return "", 0, 0, fmt.Errorf("invalid flags")
+		return "", 0, 0, 0, fmt.Errorf("invalid flags")
 	}
 	flags = uint32(parsedFlags)
 
-	if _, err := strconv.ParseInt(args[2], 10, 64); err != nil {
-		return "", 0, 0, fmt.Errorf("invalid exptime")
+	exptime, err = strconv.ParseInt(args[2], 10, 64)
+	if err != nil || exptime < 0 {
+		return "", 0, 0, 0, fmt.Errorf("invalid exptime")
 	}
 
 	parsedBytes, err := strconv.ParseInt(args[3], 10, 32)
 	if err != nil || parsedBytes < 0 {
-		return "", 0, 0, fmt.Errorf("invalid bytes")
+		return "", 0, 0, 0, fmt.Errorf("invalid bytes")
 	}
-	return key, flags, int(parsedBytes), nil
+	return key, flags, exptime, int(parsedBytes), nil
+}
+
+const exptimeRealtimeThreshold = int64(60 * 60 * 24 * 30)
+
+var nowUnix = func() int64 { return time.Now().Unix() }
+
+func normalizeExptime(exptime int64, now int64) int64 {
+	if exptime <= 0 {
+		return 0
+	}
+	if exptime <= exptimeRealtimeThreshold {
+		return now + exptime
+	}
+	return exptime
 }
 
 func parseDeltaArgs(args []string) (key string, delta uint64, err error) {
