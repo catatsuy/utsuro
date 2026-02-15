@@ -1,0 +1,61 @@
+name: mcturbo compatibility
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  mcturbo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.0"
+          cache: true
+
+      - name: Build utsuro
+        run: |
+          make build
+
+      - name: Install utsuro as memcached
+        run: |
+          sudo cp ./bin/utsuro /usr/local/bin/memcached
+
+      - name: Download purl
+        run: |
+          curl -sL https://github.com/catatsuy/purl/releases/latest/download/purl-linux-amd64.tar.gz | tar xz -C /tmp
+
+      - name: Move purl to /usr/local/bin
+        run: |
+          sudo mv /tmp/purl /usr/local/bin/
+
+      - name: Checkout mcturbo
+        uses: actions/checkout@v6
+        with:
+          repository: catatsuy/mcturbo
+          path: mcturbo
+
+      - name: Rewrite memcached startup for utsuro
+        run: |
+          purl -overwrite -replace '@exec.Command\("memcached", "-l", "127\.0\.0\.1", "-p", fmt.Sprintf\("%d", port\), "-U", "0"\)@exec.Command("memcached", "-listen", fmt.Sprintf("127.0.0.1:%d", port))@' \
+            mcturbo/client_integration_test.go \
+            mcturbo/benchmark/benchmark_test.go
+
+      - name: mcturbo integration tests
+        run: |
+          cd mcturbo
+          go test -tags=integration ./... -count=1 -timeout=120s
+
+      - name: mcturbo benchmarks
+        run: |
+          cd mcturbo/benchmark
+          MCT_WORKERS=8 MCT_MAX_SLOTS=0 GM_MAX_IDLE_CONNS=2 \
+          go test -run '^$' -bench '^Benchmark(SetSmall|GetHit|GetHitParallel|DeleteHit)/(mcturbo|gomemcache)$' -benchmem -count=1
