@@ -100,10 +100,14 @@ func (c *Cache) Get(key string) (*Item, bool) {
 }
 
 func (c *Cache) Set(key string, flags uint32, value []byte) error {
+	return c.SetWithExpiration(key, flags, value, 0)
+}
+
+func (c *Cache) SetWithExpiration(key string, flags uint32, value []byte, expUnix int64) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.setLocked(key, flags, value, 0)
+	return c.setLocked(key, flags, value, expUnix)
 }
 
 func (c *Cache) Delete(key string) bool {

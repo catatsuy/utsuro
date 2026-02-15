@@ -6,6 +6,7 @@ import (
 	"net"
 	"strings"
 	"testing"
+	"time"
 )
 
 func newPipeSession(t *testing.T) (net.Conn, func()) {
@@ -157,5 +158,34 @@ func TestMultiGetAndBadDataChunk(t *testing.T) {
 	resp = sendCommand(t, conn, "set bad 0 0 3\r\nabcX", "\r\n")
 	if resp != "CLIENT_ERROR bad data chunk\r\n" {
 		t.Fatalf("unexpected bad chunk response: %q", resp)
+	}
+}
+
+func TestSetTTLExpires(t *testing.T) {
+	conn, stop := newPipeSession(t)
+	defer stop()
+
+	resp := sendCommand(t, conn, "set ttl_rel 0 1 1\r\nx\r\n", "\r\n")
+	if resp != "STORED\r\n" {
+		t.Fatalf("unexpected set response: %q", resp)
+	}
+
+	resp = sendCommand(t, conn, "get ttl_rel\r\n", "END\r\n")
+	if resp != "VALUE ttl_rel 0 1\r\nx\r\nEND\r\n" {
+		t.Fatalf("unexpected immediate get response: %q", resp)
+	}
+	time.Sleep(1200 * time.Millisecond)
+	resp = sendCommand(t, conn, "get ttl_rel\r\n", "END\r\n")
+	if resp != "END\r\n" {
+		t.Fatalf("expected relative ttl key to be expired, got: %q", resp)
+	}
+
+	resp = sendCommand(t, conn, "set ttl_abs_past 0 2592001 1\r\ny\r\n", "\r\n")
+	if resp != "STORED\r\n" {
+		t.Fatalf("unexpected set abs response: %q", resp)
+	}
+	resp = sendCommand(t, conn, "get ttl_abs_past\r\n", "END\r\n")
+	if resp != "END\r\n" {
+		t.Fatalf("expected absolute past key to be expired immediately, got: %q", resp)
 	}
 }
