@@ -29,11 +29,25 @@ jobs:
         run: |
           sudo cp ./bin/utsuro /usr/local/bin/memcached
 
+      - name: Download purl
+        run: |
+          curl -sL https://github.com/catatsuy/purl/releases/latest/download/purl-linux-amd64.tar.gz | tar xz -C /tmp
+
+      - name: Move purl to /usr/local/bin
+        run: |
+          sudo mv /tmp/purl /usr/local/bin/
+
       - name: Checkout mcturbo
         uses: actions/checkout@v6
         with:
           repository: catatsuy/mcturbo
           path: mcturbo
+
+      - name: Rewrite memcached startup for utsuro
+        run: |
+          purl -overwrite -replace '@exec.Command\("memcached", "-l", "127\.0\.0\.1", "-p", fmt.Sprintf\("%d", port\), "-U", "0"\)@exec.Command("memcached", "-listen", fmt.Sprintf("127.0.0.1:%d", port))@' \
+            mcturbo/client_integration_test.go \
+            mcturbo/benchmark/benchmark_test.go
 
       - name: mcturbo integration tests
         run: |
